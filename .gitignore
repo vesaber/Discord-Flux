@@ -1,0 +1,4 @@
+.venv
+.env
+mappings.json
+messages.json
