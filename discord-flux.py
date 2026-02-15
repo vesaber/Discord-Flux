@@ -13,6 +13,13 @@ dtoken = os.getenv("discordtoken")
 ftoken = os.getenv("fluxertoken")
 mapfile = "mappings.json"
 msgfile = "messages.json"
+bridgemarker = "​" # bridge identifier, why because people also love using matrix but im not gonna make a whole new damn bridge just for matrix and fluxer to work (i might)
+
+def stripbridgemarker(content):
+    return content.replace(bridgemarker, "").strip()
+
+def hasbridgemarker(content):
+    return bridgemarker in content
 
 def loadjson(path):
     try:
@@ -66,12 +73,19 @@ async def on_ready():
 @dbot.event
 async def on_message(message):
     await dbot.process_commands(message)
-    if message.author.bot or message.webhook_id:
+
+    if hasbridgemarker(message.content):
+        return
+
+    if message.author.id == dbot.user.id:
         return
 
     mappings = loadjson(mapfile)
     config = mappings.get(str(message.channel.id))
     if not config:
+        return
+
+    if message.webhook_id and str(message.webhook_id) == str(config.get("dwebhookid")):
         return
 
     origcontnent = message.clean_content
@@ -92,8 +106,9 @@ async def on_message(message):
         return
 
     s = await getsession()
+    bridgedcontent = f"{bridgemarker} {content}"
     payload = {
-        "content": content,
+        "content": bridgedcontent,
         "username": f"{message.author.display_name}",
         "avatar_url": str(message.author.display_avatar.url)
     }
@@ -112,22 +127,34 @@ async def on_message(message):
                         
                         for msg in msglist:
                             msg_content = msg.get('content', '')
-                            if msg.get('webhook_id') and origcontnent in msg_content:
-                                fluxer_msg_id = msg.get('id')
-                                trackmsg(message.id, fluxer_msg_id, message.author.id, "0", origcontnent)
-                                break
+                            if msg.get('webhook_id') and bridgemarker in msg_content:
+                                cleanmsg = stripbridgemarker(msg_content)
+                                if origcontnent in cleanmsg:
+                                    fluxer_msg_id = msg.get('id')
+                                    trackmsg(message.id, fluxer_msg_id, message.author.id, "0", origcontnent)
+                                    break
             except Exception as e:
                 pass
 
 @fbot.event
 async def on_message(message):
-    iswebhook = hasattr(message, "webhook_id") and message.webhook_id is not None
-    if message.author.bot or iswebhook:
+    if message.author.id == fbot.user.id:
         return
 
     mappings = loadjson(mapfile)
     config = next((v for k, v in mappings.items() if str(v["fid"]) == str(message.channel.id)), None)
     if not config:
+        return
+    
+    if hasbridgemarker(message.content):
+        return
+
+    isfwebhook = hasattr(message, "webhook_id") and str(message.webhook_id) == str(config.get("fwebhookid"))
+    if isfwebhook:
+        return
+
+    msgs = loadjson(msgfile)
+    if str(message.id) in msgs:
         return
 
     refid = None
@@ -164,9 +191,11 @@ async def on_message(message):
         return
 
     webhook = discord.Webhook.from_url(config["dwebhook"], session=s)
+
+    bridgedcontent = f"{bridgemarker} {fincontent}"
     
     sent = await webhook.send(
-        content=fincontent,
+        content=bridgedcontent,
         username=f"{message.author.username}",
         avatar_url=getattr(message.author, "avatar_url", None),
         wait=True
@@ -186,6 +215,7 @@ async def bridge(ctx, fid: str):
         async with s.post(url, json={"name": "Discord Bridge"}, headers=headers) as resp:
             data = await resp.json()
             fhook = data.get("url") or f"https://api.fluxer.app/webhooks/{data['id']}/{data['token']}"
+            fhookid = data.get("id")
 
         maps = loadjson(mapfile)
         maps[str(ctx.channel.id)] = {
@@ -193,7 +223,9 @@ async def bridge(ctx, fid: str):
             "did": str(ctx.channel.id),
             "gid": str(ctx.guild.id),
             "dwebhook": hook.url,
-            "fwebhook": fhook
+            "dwebhookid": str(hook.id),
+            "fwebhook": fhook,
+            "fwebhookid": str(fhookid)
         }
         savejson(mapfile, maps)
         await ctx.send("Successfully bridged")

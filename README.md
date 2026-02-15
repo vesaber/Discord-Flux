@@ -2,9 +2,18 @@
 OOOOOOOOOye like bridge between Discord and Fluxer.
 written in Python.
 
+NOW SUPPORTS OTHER WEBHOOKS YIPPE
+
 ## Setup
 ```bash
 python3 -m venv .venv
+
+# Linux
+source .venv/bin/activate
+
+# Windows
+.venv\Scripts\activate
+
 pip install -r requirements.txt
 ```
 
