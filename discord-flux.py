@@ -21,6 +21,21 @@ def stripbridgemarker(content):
 def hasbridgemarker(content):
     return bridgemarker in content
 
+def attachmentlinks(attachments):
+    ext = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg")
+    links = []
+
+    for a in attachments:
+        url = a.url if hasattr(a, "url") else (a.get("url") if isinstance(a, dict) else str(a))
+        urlpath = url.split("?")[0].lower()
+
+        if any(urlpath.endswith(ext) for e in ext):
+            links.append(f"[Image]({url})")
+        else:
+            links.append(url)
+
+    return "\n".join(links)
+
 def loadjson(path):
     try:
         if os.path.exists(path):
@@ -92,7 +107,7 @@ async def on_message(message):
     content = origcontnent
     
     if message.attachments:
-        links = "\n".join([a.url for a in message.attachments])
+        links = attachmentlinks(message.attachments)
         content = f"{content}\n{links}".strip()
 
     if message.reference and message.reference.message_id:
@@ -185,8 +200,8 @@ async def on_message(message):
     content = message.content
     atts = getattr(message, 'attachments', [])
     if atts:
-        links = [a.get('url') if isinstance(a, dict) else getattr(a, 'url', '') for a in atts]
-        content = f"{content}\n" + "\n".join(links)
+        links = attachmentlinks(atts)
+        content = f"{content}\n{links}".strip()
 
     fincontent = f"{replyheader}{content}".strip()
     if not fincontent:
