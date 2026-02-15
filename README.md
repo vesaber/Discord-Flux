@@ -45,3 +45,10 @@ python discord-flux.py
 # Run on the Discord Server
 !bridge <fluxer channel id>
 ```
+
+
+# Roadmap
+
+    - Sticker support
+    - Make this more accessible for self hosted instances
+    - Docker image
