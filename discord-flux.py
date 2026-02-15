@@ -102,7 +102,7 @@ async def on_message(message):
             url = f"https://fluxer.app/channels/{config['fid']}/{config['fid']}/{ref['fid']}"
             content = f">  -# → <{url}> <@{ref['fauth']}>\n{content}"
         else:
-            content = f"{bridgemarker}{content}"
+            content = f"{bridgemarker}\n{content}"
 
     if not content.strip():
         return
@@ -194,7 +194,7 @@ async def on_message(message):
 
     webhook = discord.Webhook.from_url(config["dwebhook"], session=s)
 
-    bridgedcontent = f"{fincontent}{bridgemarker}"
+    bridgedcontent = f"{fincontent}\n{bridgemarker}"
     
     sent = await webhook.send(
         content=bridgedcontent,
