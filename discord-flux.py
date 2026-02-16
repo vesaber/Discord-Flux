@@ -115,7 +115,7 @@ async def on_message(message):
         ref = msgs.get(str(message.reference.message_id))
         if ref:
             url = f"https://fluxer.app/channels/{config['fid']}/{config['fid']}/{ref['fid']}"
-            content = f">  -# → <{url}> <@{ref['fauth']}>\n{content}"
+            content = f"-# → <{url}> <@{ref['fauth']}>\n{content}"
         else:
             content = f"{bridgemarker}\n{content}"
 
@@ -195,7 +195,7 @@ async def on_message(message):
         ref_data = msgs.get(str(refid))
         if ref_data:
             jumpurl = f"https://discord.com/channels/{config['gid']}/{config['did']}/{ref_data['did']}"
-            replyheader = f"> -# → {jumpurl} <@{ref_data['dauth']}>\n"
+            replyheader = f"-# → {jumpurl} <@{ref_data['dauth']}>"
 
     content = message.content
     atts = getattr(message, 'attachments', [])
@@ -203,13 +203,16 @@ async def on_message(message):
         links = attachmentlinks(atts)
         content = f"{content}\n{links}".strip()
 
-    fincontent = f"{replyheader}{content}".strip()
+    if replyheader:
+        fincontent = f"{replyheader}\n{content}".strip()
+    else:
+        fincontent = content.strip()
     if not fincontent:
         return
 
     webhook = discord.Webhook.from_url(config["dwebhook"], session=s)
 
-    bridgedcontent = f"{fincontent}\n{bridgemarker}"
+    bridgedcontent = f"{fincontent} {bridgemarker}"
     
     sent = await webhook.send(
         content=bridgedcontent,
