@@ -62,6 +62,7 @@ The bot currently only has one command and it's to bridge a channel manually fro
 #### bridge
 ```
 # Usage
+## Works only on discord
 !bridge <fluxer channel id>
 ```
 
