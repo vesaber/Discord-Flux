@@ -4,6 +4,14 @@ written in Python.
 
 ##### ⚠️ For now please do not touch the Dockerfile, it is still in the making
 
+## Requirements
+```
+  - Python 3.10 or higher
+  - uv Python Package Manager
+  - Discord Bot
+  - Fluxer Bot
+```
+
 ## Setup
 
 ### Clone and sync the Project
@@ -17,7 +25,7 @@ written in Python.
 2. powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex" # For Windows
 
 # Install dependencies
-uv sync
+3. uv sync
 ```
 
 ### Create the `.env` file
@@ -68,9 +76,11 @@ The bot currently only has one command and it's to bridge a channel manually fro
 
 # Roadmap
 
-    - Sticker and Emoji support
-    - Make this more accessible for self hosted instances
-    - Docker image
-    - Reactions
-    - After I finish the Fluxer Rust API Wrapper I will be rewriting this in the rust language
-    - Multi-Channel support for big servers, maybe even automatic server building with permissions
+```
+  - Sticker and Emoji support
+  - Make this more accessible for self hosted instances
+  - Docker image
+  - Reactions
+  - After I finish the Fluxer Rust API Wrapper I will be rewriting this in the rust language
+  - Multi-Channel support for big servers, maybe even automatic server building with permissions
+```
