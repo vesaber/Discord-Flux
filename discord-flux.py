@@ -8,6 +8,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import hashlib
 import time
+import re
 
 load_dotenv()
 
@@ -18,6 +19,61 @@ msgfile = "messages.json"
 
 recenthashes = {}
 HASH_EXPIRY = 30
+
+# Mention fix to prevent "unknown user" error in Discord.
+# We convert the username in plain text using @username or @fluxer:12345
+MENTION_USER_RE = re.compile(r"<@!?([0-9]+)>")
+MENTION_ROLE_RE = re.compile(r"<@&([0-9]+)>")
+MENTION_CHAN_RE = re.compile(r"<#([0-9]+)>")
+
+_fluxer_name_cache: dict[str, str] = {}
+
+async def _fetch_fluxer_username(user_id: str) -> str | None:
+    if user_id in _fluxer_name_cache:
+        return _fluxer_name_cache[user_id]
+
+    s = await getsession()
+    headers = {"Authorization": f"Bot {ftoken}"}
+    apiurl = f"https://api.fluxer.app/v1/users/{user_id}"
+
+    try:
+        async with s.get(apiurl, headers=headers) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                name = (
+                    data.get("global_name")
+                    or data.get("display_name")
+                    or data.get("username")
+                )
+                if name:
+                    _fluxer_name_cache[user_id] = str(name)
+                    return _fluxer_name_cache[user_id]
+    except Exception:
+        pass
+
+    return None
+
+async def rewrite_fluxer_mentions_to_text(content: str) -> str:
+    if not content:
+        return content
+
+    user_ids = set(MENTION_USER_RE.findall(content))
+    user_map: dict[str, str] = {}
+    for uid in user_ids:
+        uname = await _fetch_fluxer_username(uid)
+        user_map[uid] = f"@{uname}" if uname else f"@fluxer:{uid}"
+
+    def sub_user(m: re.Match) -> str:
+        uid = m.group(1)
+        return user_map.get(uid, f"@fluxer:{uid}")
+
+    content = MENTION_USER_RE.sub(sub_user, content)
+
+    # Read and write role and channels, but don't make them interactive
+    content = MENTION_ROLE_RE.sub(lambda m: f"@role:{m.group(1)}", content)
+    content = MENTION_CHAN_RE.sub(lambda m: f"#chan:{m.group(1)}", content)
+
+    return content
 
 def getmsgfingerprint(content, author_id, channel_id):
     data = f"{content[:200]}"
@@ -211,6 +267,8 @@ async def on_message(message):
             replyheader = f"-# → {jumpurl} <@{ref_data['dauth']}>"
 
     content = message.content
+    content = await rewrite_fluxer_mentions_to_text(content)
+    
     atts = getattr(message, 'attachments', [])
     if atts:
         links = attachmentlinks(atts)
