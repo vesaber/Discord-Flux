@@ -247,7 +247,7 @@ async def on_message(message):
     
     s = await getsession()
     headers = {"Authorization": f"Bot {ftoken}"}
-    apiurl = f"https://api.fluxer.app/v1/channels/{message.channel_id}/messages/{message.id}"
+    apiurl = f"https://api.fluxer.app/v1/channels/{message.channel.id}/messages/{message.id}"
     
     try:
         async with s.get(apiurl, headers=headers) as resp:
@@ -322,6 +322,22 @@ async def bridge(ctx, fid: str):
         await ctx.send("Successfully bridged")
     except Exception as e:
         await ctx.send(f"Error: {e}")
+
+@dbot.command()
+@commands.has_permissions(manage_webhooks=True)
+async def unbridge(ctx):
+    maps = loadjson(mapfile)
+    key = str(ctx.channel.id)
+
+    if key not in maps:
+        await ctx.send("This channel isn't bridged.")
+        return
+
+    maps.pop(key, None)
+    savejson(mapfile, maps)
+
+    await ctx.send("Channel un-bridged correctly!")
+
 
 async def main():
     await asyncio.gather(dbot.start(dtoken), fbot.start(ftoken))
