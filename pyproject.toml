@@ -10,6 +10,7 @@ dependencies = [
     "aiosignal==1.4.0",
     "attrs==25.4.0",
     "audioop-lts==0.2.2",
+    "certifi>=2026.1.4",
     "discord-py==2.6.4",
     "fluxer-py==0.1.2",
     "frozenlist==1.8.0",
