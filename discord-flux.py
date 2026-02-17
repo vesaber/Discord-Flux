@@ -6,6 +6,8 @@ import json
 import os
 from discord.ext import commands
 from dotenv import load_dotenv
+import hashlib
+import time
 
 load_dotenv()
 
@@ -13,13 +15,25 @@ dtoken = os.getenv("discordtoken")
 ftoken = os.getenv("fluxertoken")
 mapfile = "mappings.json"
 msgfile = "messages.json"
-bridgemarker = "​" # bridge identifier, why because people also love using matrix but im not gonna make a whole new damn bridge just for matrix and fluxer to work (i might)
 
-def stripbridgemarker(content):
-    return content.replace(bridgemarker, "").strip()
+recenthashes = {}
+HASH_EXPIRY = 30
 
-def hasbridgemarker(content):
-    return bridgemarker in content
+def getmsgfingerprint(content, author_id, channel_id):
+    data = f"{content[:200]}"
+    return hashlib.md5(data.encode()).hexdigest()
+
+def isrecentbridgemsg(content, author_id, channel_id):
+    fingerprint = getmsgfingerprint(content, author_id, channel_id)
+    currenttime = time.time()
+    expired = [k for k, v in recenthashes.items() if currenttime - v > HASH_EXPIRY]
+    for k in expired:
+        del recenthashes[k]
+    return fingerprint in recenthashes
+
+def trackbridgemsg(content, author_id, channel_id):
+    fingerprint = getmsgfingerprint(content, author_id, channel_id)
+    recenthashes[fingerprint] = time.time()
 
 def attachmentlinks(attachments):
     ext = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg")
@@ -89,9 +103,6 @@ async def on_ready():
 async def on_message(message):
     await dbot.process_commands(message)
 
-    if hasbridgemarker(message.content):
-        return
-
     if message.author.id == dbot.user.id:
         return
 
@@ -101,6 +112,9 @@ async def on_message(message):
         return
 
     if message.webhook_id and str(message.webhook_id) == str(config.get("dwebhookid")):
+        return
+    
+    if isrecentbridgemsg(message.clean_content, message.author.id, message.channel.id):
         return
 
     origcontnent = message.clean_content
@@ -116,19 +130,19 @@ async def on_message(message):
         if ref:
             url = f"https://fluxer.app/channels/{config['fid']}/{config['fid']}/{ref['fid']}"
             content = f"-# → <{url}> <@{ref['fauth']}>\n{content}"
-        else:
-            content = f"{bridgemarker}\n{content}"
+
 
     if not content.strip():
         return
 
     s = await getsession()
-    bridgedcontent = f"{content}{bridgemarker}"
     payload = {
-        "content": bridgedcontent,
+        "content": content,
         "username": f"{message.author.display_name}",
         "avatar_url": str(message.author.display_avatar.url)
     }
+
+    trackbridgemsg(content, message.author.id, message.channel.id)
     
     async with s.post(config["fwebhook"], json=payload) as resp:
         if resp.status in [200, 201, 204]:
@@ -144,9 +158,8 @@ async def on_message(message):
                         
                         for msg in msglist:
                             msg_content = msg.get('content', '')
-                            if msg.get('webhook_id') and bridgemarker in msg_content:
-                                cleanmsg = stripbridgemarker(msg_content)
-                                if origcontnent in cleanmsg:
+                            if msg.get('webhook_id'):
+                                if origcontnent in msg_content:
                                     fluxer_msg_id = msg.get('id')
                                     trackmsg(message.id, fluxer_msg_id, message.author.id, "0", origcontnent)
                                     break
@@ -162,12 +175,12 @@ async def on_message(message):
     config = next((v for k, v in mappings.items() if str(v["fid"]) == str(message.channel.id)), None)
     if not config:
         return
-    
-    if hasbridgemarker(message.content):
-        return
 
     isfwebhook = hasattr(message, "webhook_id") and str(message.webhook_id) == str(config.get("fwebhookid"))
     if isfwebhook:
+        return
+
+    if isrecentbridgemsg(message.content, message.author.id, message.channel.id):
         return
 
     msgs = loadjson(msgfile)
@@ -212,10 +225,10 @@ async def on_message(message):
 
     webhook = discord.Webhook.from_url(config["dwebhook"], session=s)
 
-    bridgedcontent = f"{fincontent} {bridgemarker}"
+    trackbridgemsg(fincontent, message.author.id, message.channel.id)
     
     sent = await webhook.send(
-        content=bridgedcontent,
+        content=fincontent,
         username=f"{message.author.username}",
         avatar_url=getattr(message.author, "avatar_url", None),
         wait=True
