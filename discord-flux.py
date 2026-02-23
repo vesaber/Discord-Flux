@@ -95,7 +95,7 @@ class FluxerBridge:
         if not message.webhook_id:
             return False
         cached = self.dwebhooks.get(message.channel_id)
-        return cached is not None and message.channel_id == cached.id
+        return cached is not None and message.webhook_id == cached.id
 
     def iswebhookf(self, message):
         webhookid = getattr(message, 'webhook_id', None)
@@ -137,41 +137,41 @@ class FluxerBridge:
 
             lastfmsg = None
 
-            for attachment in message.attachments:
-                data, filename = await self.download(attachment.url)
-                if data:
-                    form = aiohttp.FormData()
-                    form.add_field("payload_json", json.dumps({
-                        "username": message.author.display_name,
-                        "avatar_url": str(message.author.display_avatar.url),
-                        "attachments": [{"id": 0, "filename": filename}]
-                    }), content_type="application/json")
-                    form.add_field("files[0]", data, filename=filename, content_type="application/octet-stream")
-                    async with session.post(url, data=form) as r:
-                        if r.status in [200, 201]:
-                            lastfmsg = await r.json()
-                        else:
-                            print(f"[D->F] File upload failed: {r.status} {await r.text()}")
+            form = aiohttp.FormData()
+            form_payload = {
+                "username": message.author.display_name,
+                "avatar_url": str(message.author.display_avatar.url),
+                "attachments": [],
+            }
 
             text = f"{replyhead}{message.clean_content}".strip()
-            if text:
-                payload = {
-                    "content": text,
-                    "username": message.author.display_name,
-                    "avatar_url": str(message.author.display_avatar.url)
-                }
-                async with session.post(url, json=payload) as r:
-                    if r.status in [200, 201]:
-                        lastfmsg = await r.json()
-                    else:
-                        print(f"[D->F] Text post failed: {r.status} {await r.text()}")
+            if text: form_payload["content"] = text
+
+            for i, attachment in enumerate(message.attachments):
+                data, filename = await self.download(attachment.url)
+                if data:
+                    form_payload["attachments"].append({"id": i, "filename": filename})
+                    form.add_field(f"files[{i}]", data, filename=filename, content_type="application/octet-stream")
+
+            form.add_field("payload_json", json.dumps(form_payload), content_type="application/json")
+
+            async with session.post(url, data=form) as r:
+                if r.status in [200, 201]: lastfmsg = await r.json()
+                else: print(f"[D->F] Message post failed: {r.status} {await r.text()}")
 
             if lastfmsg:
                 fchan = await self.fluxer.fetch_channel(fid)
-                sid = getattr(fchan, 'guild_id', '0')
-                db.execute("INSERT INTO msgmap VALUES (?, ?, ?, ?, ?)", (
-                    str(message.id), str(lastfmsg['id']), cid, str(lastfmsg['author']['id']), str(sid)
-                ))
+                sid = getattr(fchan, "guild_id", "0")
+                db.execute(
+                    "INSERT INTO msgmap VALUES (?, ?, ?, ?, ?)",
+                    (
+                        str(message.id),
+                        str(lastfmsg["id"]),
+                        cid,
+                        str(lastfmsg["author"]["id"]),
+                        str(sid),
+                    ),
+                )
                 db.commit()
 
         @self.fluxer.event
@@ -214,47 +214,51 @@ class FluxerBridge:
             webhook = await self.getdiswebhook(channel)
             if not webhook: return
 
-            attachment_urls = []
+            files = []
             for a in (message.attachments or []):
-                if isinstance(a, dict):
-                    atturl = a.get('url') or a.get('proxy_url')
-                else:
-                    atturl = getattr(a, 'url', None) or getattr(a, 'proxy_url', None)
+                if isinstance(a, dict): atturl = a.get("url") or a.get("proxy_url")
+                else: atturl = getattr(a, "url", None) or getattr(a, "proxy_url", None)
+
                 if atturl:
-                    attachment_urls.append(str(atturl))
+                    data, filename = await self.download(atturl)
+                    if data: files.append(discord.File(io.BytesIO(data), filename=filename))
 
             try:
                 username = message.author.username
                 avatar_url = str(message.author.avatar_url)
+                content = f"{replyhead}{message.content}".strip() or None
 
-                dismsg = None
-
-                for atturl in attachment_urls:
-                    data, filename = await self.download(atturl)
-                    if data:
+                if content or files:
+                    if files:
                         dismsg = await webhook.send(
+                            content=content,
                             username=username,
                             avatar_url=avatar_url,
-                            file=discord.File(io.BytesIO(data), filename=filename),
-                            wait=True
+                            files=files,
+                            wait=True,
+                        )
+                    else:
+                        dismsg = await webhook.send(
+                            content=content,
+                            username=username,
+                            avatar_url=avatar_url,
+                            wait=True,
                         )
 
-                content = f"{replyhead}{message.content}".strip()
-                if content:
-                    dismsg = await webhook.send(
-                        content=content,
-                        username=username,
-                        avatar_url=avatar_url,
-                        wait=True
-                    )
-
-                if dismsg:
-                    fchan = await self.fluxer.fetch_channel(str(message.channel_id))
-                    sid = getattr(fchan, 'guild_id', '0')
-                    db.execute("INSERT INTO msgmap VALUES (?, ?, ?, ?, ?)", (
-                        str(dismsg.id), str(message.id), did, str(message.author.id), str(sid)
-                    ))
-                    db.commit()
+                    if dismsg:
+                        fchan = await self.fluxer.fetch_channel(str(message.channel_id))
+                        sid = getattr(fchan, "guild_id", "0")
+                        db.execute(
+                            "INSERT INTO msgmap VALUES (?, ?, ?, ?, ?)",
+                            (
+                                str(dismsg.id),
+                                str(message.id),
+                                did,
+                                str(message.author.id),
+                                str(sid),
+                            ),
+                        )
+                        db.commit()
 
             except Exception as e:
                 print(f"[F->D] Webhook send error: {e}")
