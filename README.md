@@ -2,6 +2,8 @@
 OOOOOOOOOye like bridge between Discord and Fluxer.
 written in Python.
 
+# This project is not actively being worked, I instead suggest [Fluxcord](https://git.gay/Fluxcord/core)
+
 ## Requirements
 ```
   - Python 3.10 or higher
